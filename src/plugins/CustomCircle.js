@@ -5,19 +5,14 @@ import {ol} from '../constants'
 class CustomCircle {
   constructor(map, options) {
     this.map = map; //当前map对象
-
-    this.resolution = this.map.getView().getResolution(); //分辨率，每个象元代表的实地距离
     this.center = options.center;
-    this.projection = this.map.getView().getProjection();
-    this.minRadius = 500 * this.resolution; //最小半径
-    this.maxRadius = 5000000 * this.resolution; //最大半径
-    this.distance = options.distance ? this.transformRadius(this.center, options.distance) : this.transformRadius(this.center, this.minRadius);
+    this.minRadius = 500; //最小半径
+    this.maxRadius = 50000; //最大半径
+    this.distance = options.distance ? options.distance : this.minRadius;
     this.mouseIng = false;  //移动状态 false (未移动)true (移动中)
-    this.featureM = this.addRangeCircle();   //圆的feature
+    this.feature = this.addRangeCircle();   //圆的feature
     this.editor = this.addEditor(); //编辑器 overlay
-    this.textM = this.addText(); //text文本dom
-    this.unit = options.distance ? options.distance : this.minRadius;
-
+    this.text = this.distance + "m"; //text文本默认显示
 
   }
 
@@ -35,14 +30,14 @@ class CustomCircle {
     //创建中心点
     //let centerPoint = this.addCenterPoint(src, this.center);
     //this.map.addOverlay(centerPoint);
-    layer.getSource().addFeature(this.featureM);
+    layer.getSource().addFeature(this.feature);
 
     //创建编辑器
     //this.editor = this.addEditor(this.feature.getGeometry().getLastCoordinate(), distance);
 
-    this.map.addOverlay(this.editor);
+    //this.map.addOverlay(this.editor);
 
-    this.dragEditor(); // 开启拖拽事件
+    //this.dragEditor(); // 开启拖拽事件
 
   }
 
@@ -80,21 +75,6 @@ class CustomCircle {
     icon.setAttribute("id", "icon");
     icon.src = src;
     editor.appendChild(icon);
-
-    editor.appendChild(this.addText());
-
-    //console.info(this.feature.getGeometry().getLastCoordinate())
-    let overlay = new ol.Overlay({
-      element: editor
-    });
-    overlay.setPosition(this.featureM.getGeometry().getLastCoordinate());
-    return overlay;
-
-  }
-
-  addText() {
-    //添加text文本
-    console.info(this.unit)
     let text = document.createElement("div");
     text.setAttribute("id", "range");
     text.innerHTML = this.distance + "m";
@@ -111,7 +91,16 @@ class CustomCircle {
     text.style.left = "30px";
     text.style.top = "-24px";
     text.style.fontSize = "12px";
-    return text;
+    this.text = text;
+    editor.appendChild(text);
+
+    console.info(this.feature.getGeometry().getLastCoordinate())
+    let overlay = new ol.Overlay({
+      element: editor
+    });
+    overlay.setPosition(this.feature.getGeometry().getLastCoordinate());
+    return overlay;
+
   }
 
   /**
@@ -121,27 +110,21 @@ class CustomCircle {
    * @returns {number} 返回圆的半径
    */
   getRadius(coordinate) {
-    coordinate = ol.proj.transform(coordinate, this.projection, 'EPSG:4326');
-    //var radius = Math.sqrt(Math.pow(coordinate[0] - this.center[0], 2) + Math.pow(coordinate[1] - this.center[1], 2));
-    var wgs84Sphere = new ol.Sphere(6378137)
-
-    var radius = wgs84Sphere.haversineDistance(this.center, coordinate);
-    var unit = radius;
-    radius = this.transformRadius(this.center, radius);
-    //ol.proj.transform(coordinates[i], sourceProj, 'EPSG:4326')
-    console.info(radius);
-    /*radius = radius / this.resolution;
-     if (radius > this.maxRadius) {
-     radius = this.maxRadius;
-     } else if (radius < this.minRadius) {
-     radius = this.minRadius;
-     }*/
-
-    return {unit: unit, radius: radius};
+    var radius = Math.sqrt(Math.pow(coordinate[0] - this.center[0], 2) + Math.pow(coordinate[1] - this.center[1], 2));
+    if (radius > this.maxRadius) {
+      radius = this.maxRadius;
+    } else if (radius < this.minRadius) {
+      radius = this.minRadius;
+    }
+    return radius;
   }
 
   dragEditor() {
     var self = this;
+    //let mouseIng = this.mouseIng;
+    //let feature = this.feature;
+    //let text = this.text;
+    //let editor = this.editor;
     //拖拽编辑器
     document.onmouseup = function (evt) {
       self.mouseIng = false;
@@ -151,40 +134,16 @@ class CustomCircle {
     };
     this.map.on("pointermove", function (event) {
       if (self.mouseIng) {
+
         let radius = self.getRadius(event.coordinate);
         //重新设置圆的半径
-        self.featureM.getGeometry().setRadius(radius["radius"]);  //全局方法和全局对象如何调用
+        self.feature.getGeometry().setRadius(radius);  //全局方法和全局对象如何调用
         //重新设置 text值
-        let text = document.getElementById("range");
-        text.innerHTML = parseInt(radius["unit"]) + "m";
+        self.text.innerHTML = parseInt(radius) + "m";
         //重新设置overlay位置
-        self.editor.setPosition(self.featureM.getGeometry().getLastCoordinate());
-
-
-        /*  var extent = self.featureM.getGeometry().getExtent()//获取点合适的范围
-         var center = ol.extent.getCenter(extent) //重新设置view的中心点
-         var size = self.map.getSize() //获取size大小 格式 [x,y]
-         self.map.getView().setCenter(center)
-         self.map.getView().fit(extent, size)*/
+        self.editor.setPosition(self.feature.getGeometry().getLastCoordinate());
       }
     })
-  }
-
-  transformRadius(center, meterRadius) {
-    let transformRadiu = 0;
-    switch (this.projection.getCode()) {
-      case 'EPSG:4326':
-        let lastcoord = new ol.Sphere(6378137).offset(center, meterRadius, (270 / 360) * 2 * Math.PI); //计算偏移量
-        let dx = center[0] - lastcoord[0];
-        let dy = center[1] - lastcoord[1];
-        transformRadiu = Math.sqrt(Math.pow(dx, 2) + Math.pow(dy, 2));
-        break;
-      case 'EPSG:3857':
-      case 'EPSG:102100':
-        transformRadiu = meterRadius;
-        break;
-    }
-    return transformRadiu
   }
 
 }
