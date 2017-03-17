@@ -54,7 +54,8 @@ class CustomCircle {
     this.map.addOverlay(this.editor);
     // 开启拖拽事件
     this.dragEditor();
-
+    //默认设置地图范围
+    //this.setSuitableExtent();
   }
 
   /**
@@ -140,16 +141,26 @@ class CustomCircle {
    * @returns {number} 返回圆的半径
    */
   getRadius(coordinate) {
-    let radius = this.sphere.haversineDistance(this.center, coordinate);
+    let radius = null;
+    switch (this.projection.getCode()) {
+      case "EPSG:4326":
+        radius = this.sphere.haversineDistance(this.center, coordinate);
+        break;
+      case "EPSG:3857":
+      case "EPSG:102100":
+        //求平方根
+        radius = Math.sqrt(Math.pow(coordinate[0] - this.center[0], 2) + Math.pow(coordinate[1] - this.center[1], 2));
+        break;
+    }
     let unit = radius;
     radius = this.transformRadius(this.center, radius);
-    if (unit > this.maxRadius) {
-      radius = this.transformRadius(this.center, this.maxRadius);
-      unit = this.maxRadius;
-    } else if (unit < this.minRadius) {
-      radius = this.transformRadius(this.center, this.minRadius);
-      unit = this.minRadius;
-    }
+    /* if (unit > this.maxRadius) {
+     radius = this.transformRadius(this.center, this.maxRadius);
+     unit = this.maxRadius;
+     } else if (unit < this.minRadius) {
+     radius = this.transformRadius(this.center, this.minRadius);
+     unit = this.minRadius;
+     }*/
     return {unit: unit, radius: radius};
   }
 
@@ -175,6 +186,11 @@ class CustomCircle {
         text.innerHTML = parseInt(radius["unit"]) + "m";
         //重新设置overlay位置
         self.editor.setPosition(self.feature.getGeometry().getLastCoordinate());
+        //给其适当范围
+        /*self.map.getLayers().forEach(function (layer) {
+         layer.setExtent(self._getGeometry().getExtent())
+         })*/
+        //console.info()
       }
     })
   }
@@ -200,6 +216,18 @@ class CustomCircle {
         break;
     }
     return transformRadiu
+  }
+
+
+  /**
+   * 将地图缩放到合适的范围
+   */
+  setSuitableExtent() {
+    let extent = this._getGeometry().getExtent();
+    let center = ol.extent.getCenter(extent)
+    var size = this.map.getSize();
+    this.map.getView().setCenter(center)
+    this.map.getView().fit(extent, size)
   }
 
   /**
